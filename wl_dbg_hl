@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+from pygments import highlight
+from pygments.lexer import RegexLexer
+from pygments.token import Text, Name, String, Number, Punctuation, Operator, Keyword, Comment
+from pygments.formatters.terminal import TerminalFormatter
+
+class WlDbgLexer(RegexLexer):
+    name = 'Wayland Debug Highlighter'
+    aliases = ['wl_dbg_hl']
+    tokens = {
+        'root': [
+            (r'\[.*[0-9]*\.[0-9]*\]', Comment.Preproc),
+            (r' ', Text),
+            (r'\{.*\} ', Text),
+            (r'->', Operator),
+            (r'discarded', Keyword),
+            (r'[a-zA-Z0-9_]+(?=#)', Name.Builtin, 'interface'),
+            (r'.+', Text),
+        ],
+        'interface': [
+            (r'\[unknown\]|[a-zA-Z0-9_]+(?=#)', Name.Builtin),
+            (r'#\d+', Text),
+            (r'\.', Operator, 'message'),
+            (r' ', Keyword),
+        ],
+        'message': [
+            (r'[a-zA-Z_]', Name.Function),
+            (r'\(', Number, 'parameters'),
+        ],
+        'parameters': [
+            (r'(?:(?<!")\b\w+\b(?!"))|(?<!")[,.](?!")', Number),
+            (r'"[^"]*"', String, "string"),
+            (r'\b(?:array|fd|id|new|nil)(?:(?:array|fd|id|new|nil))*\b', Keyword),
+            (r'[\[\]]', Number),
+            (r'\[unknown\]|[a-zA-Z0-9_]+(?=#)', Name.Builtin),
+            (r'#\d+', Text),
+            (r'[, ]', Punctuation),
+            (r'\)', Number),
+        ],
+        'string': [
+            (r'"[^"]*"', String, "string"),
+            (r', ', Punctuation),
+            (r'(?:(?<!")\b\w+\b(?!"))|(?<!"),(?!")', Number, "parameters"),
+            (r'\)', Number),
+        ],
+    }
+
+def main():
+    process = subprocess.Popen(
+        sys.argv[1:],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=os.environ.copy() | {"WAYLAND_DEBUG": "1"}
+    )
+
+    if process.stdout:
+        for line in process.stdout:
+            sys.stdout.write(highlight(line, WlDbgLexer(), TerminalFormatter()))
+
+    process.wait()
+
+if __name__ == '__main__':
+    main()
